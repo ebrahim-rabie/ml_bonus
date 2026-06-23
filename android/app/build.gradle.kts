@@ -6,8 +6,8 @@ plugins {
 }
 
 android {
-    namespace = "com.example.ml_bonus"
-    compileSdk = flutter.compileSdkVersion
+    namespace = "com.example.untitled"
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -21,11 +21,11 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.ml_bonus"
+        applicationId = "com.example.untitled"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
@@ -36,6 +36,10 @@ android {
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
+    }
+
+    androidResources {
+        noCompress.add("tflite")
     }
 }
 

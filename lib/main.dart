@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:ml_bonus/screens/home_screen.dart';
+import 'screens/home_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -12,22 +12,15 @@ class ArabicDigitApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Arabic Digit Recognition',
+      title: 'Arabic Digit Recognizer',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6C63FF),
-          brightness: Brightness.light,
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF0A0A0F),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF00E5FF),
+          secondary: Color(0xFF7C4DFF),
+          surface: Color(0xFF12121A),
         ),
-        useMaterial3: true,
-        fontFamily: 'Roboto',
-      ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6C63FF),
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
       ),
       home: const HomeScreen(),
     );

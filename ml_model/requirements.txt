@@ -1,8 +1,0 @@
-tensorflow>=2.13.0
-numpy
-matplotlib
-pandas
-scikit-learn
-jupyter
-opencv-python
-seaborn

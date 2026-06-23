@@ -1,18 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:fluttertoast/fluttertoast.dart';
-import 'package:ml_bonus/services/tflite_service.dart';
-import 'package:ml_bonus/widgets/drawing_canvas.dart';
-import 'package:ml_bonus/widgets/prediction_card.dart';
+import 'package:image/image.dart' as img;
+import '../classifier/digit_classifier.dart';
+import '../widgets/detected_boxes_view.dart';
 
-
-/// Main screen of the Arabic Digit Recognition app
-///
-/// Features:
-/// - Drawing canvas for handwritten input
-/// - Gallery image upload
-/// - Real-time prediction display
-/// - Confidence visualization
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -21,14 +13,19 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final TFLiteService _tfliteService = TFLiteService();
-  final ImagePicker _imagePicker = ImagePicker();
-  final GlobalKey<DrawingCanvasState> _canvasKey = GlobalKey<DrawingCanvasState>();
+  ArabicDigitClassifier? _classifier;
+  final ImagePicker _picker = ImagePicker();
 
-  bool _isModelLoading = true;
-  bool _isPredicting = false;
-  PredictionResult? _predictionResult;
-  String? _errorMessage;
+  bool _isModelLoaded = false;
+  bool _isProcessing = false;
+
+  File? _selectedImage;
+  int? _predictedDigit;
+  String _arabicDigit = '';
+  String _latinDigit = '';
+  double _confidence = 0.0;
+  List<double> _probabilities = [];
+  MultiDigitPrediction? _lastPrediction;
 
   @override
   void initState() {
@@ -36,412 +33,490 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadModel();
   }
 
-  @override
-  void dispose() {
-    _tfliteService.dispose();
-    super.dispose();
-  }
-
-  /// Load TFLite model on startup
   Future<void> _loadModel() async {
     try {
-      await _tfliteService.loadModel();
-      setState(() {
-        _isModelLoading = false;
-      });
+      _classifier = await ArabicDigitClassifier.create();
+      if (mounted) setState(() => _isModelLoaded = true);
     } catch (e) {
-      setState(() {
-        _isModelLoading = false;
-        _errorMessage = 'Failed to load model: $e\n\n'
-            'Please ensure arabic_digit_ann.tflite is in assets/model/';
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading model: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
-  /// Predict from drawing canvas
-  Future<void> _predictFromDrawing() async {
-    if (!_tfliteService.isLoaded) {
-      Fluttertoast.showToast(msg: 'Model not loaded yet');
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: source,
+        maxWidth: 512,
+        maxHeight: 512,
+      );
+
+      if (pickedFile == null) return;
+
+      setState(() {
+        _selectedImage = File(pickedFile.path);
+        _isProcessing = true;
+        _predictedDigit = null;
+      });
+
+      await _runInference();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _runInference() async {
+    if (_selectedImage == null || !_isModelLoaded) {
+      setState(() => _isProcessing = false);
       return;
     }
 
-    setState(() {
-      _isPredicting = true;
-      _predictionResult = null;
-    });
-
     try {
-      final imageData = await _canvasKey.currentState?.getImageData();
-      if (imageData == null) {
-        Fluttertoast.showToast(msg: 'Canvas is empty');
-        setState(() => _isPredicting = false);
+      final bytes = await _selectedImage!.readAsBytes();
+      final rawImage = img.decodeImage(bytes);
+
+      if (rawImage == null) {
+        setState(() => _isProcessing = false);
         return;
       }
 
-      // Preprocess drawing (invert colors: white bg -> black bg)
-      final processed = ImagePreprocessingService.preprocessDrawing(imageData, invert: true);
+      final result = _classifier?.predictImage(rawImage);
 
-      // Run prediction
-      final result = await _tfliteService.predict(processed);
+      if (result != null && result.digits.isNotEmpty && mounted) {
+        final firstDigit = result.digits.first;
+        const arabicLabels = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+        String arabicText = result.text.split('').map((c) => arabicLabels[int.parse(c)]).join();
 
-      setState(() {
-        _predictionResult = result;
-        _isPredicting = false;
-      });
-
-      Fluttertoast.showToast(
-        msg: 'Predicted: ${result.digit} (${result.confidencePercent})',
-        toastLength: Toast.LENGTH_SHORT,
-      );
-
+        setState(() {
+          _predictedDigit = firstDigit.digit;
+          _arabicDigit = arabicText;
+          _latinDigit = result.text;
+          _confidence = firstDigit.confidence;
+          _probabilities = firstDigit.probabilities;
+          _lastPrediction = result;
+          _isProcessing = false;
+        });
+      } else {
+        setState(() => _isProcessing = false);
+      }
     } catch (e) {
-      setState(() => _isPredicting = false);
-      Fluttertoast.showToast(msg: 'Prediction error: $e');
+      setState(() => _isProcessing = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Inference error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
-  /// Predict from gallery image
-  Future<void> _predictFromGallery() async {
-    if (!_tfliteService.isLoaded) {
-      Fluttertoast.showToast(msg: 'Model not loaded yet');
-      return;
-    }
-
-    try {
-      final XFile? pickedFile = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 512,
-        maxHeight: 512,
-        imageQuality: 90,
-      );
-
-      if (pickedFile == null) return;
-
-      setState(() {
-        _isPredicting = true;
-        _predictionResult = null;
-      });
-
-      final bytes = await pickedFile.readAsBytes();
-      final result = await _tfliteService.predictFromBytes(bytes);
-
-      setState(() {
-        _predictionResult = result;
-        _isPredicting = false;
-      });
-
-      Fluttertoast.showToast(
-        msg: 'Predicted: ${result.digit} (${result.confidencePercent})',
-        toastLength: Toast.LENGTH_SHORT,
-      );
-
-    } catch (e) {
-      setState(() => _isPredicting = false);
-      Fluttertoast.showToast(msg: 'Image prediction error: $e');
-    }
-  }
-
-  /// Predict from camera
-  Future<void> _predictFromCamera() async {
-    if (!_tfliteService.isLoaded) {
-      Fluttertoast.showToast(msg: 'Model not loaded yet');
-      return;
-    }
-
-    try {
-      final XFile? pickedFile = await _imagePicker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 512,
-        maxHeight: 512,
-        imageQuality: 90,
-      );
-
-      if (pickedFile == null) return;
-
-      setState(() {
-        _isPredicting = true;
-        _predictionResult = null;
-      });
-
-      final bytes = await pickedFile.readAsBytes();
-      final result = await _tfliteService.predictFromBytes(bytes);
-
-      setState(() {
-        _predictionResult = result;
-        _isPredicting = false;
-      });
-
-    } catch (e) {
-      setState(() => _isPredicting = false);
-      Fluttertoast.showToast(msg: 'Camera prediction error: $e');
-    }
-  }
-
-  /// Clear all inputs and results
-  void _clearAll() {
-    _canvasKey.currentState?.clearCanvas();
-    setState(() {
-      _predictionResult = null;
-      _errorMessage = null;
-    });
+  @override
+  void dispose() {
+    _classifier?.close();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    // Show loading screen while model loads
-    if (_isModelLoading) {
-      return Scaffold(
-        body: Center(
+    return Scaffold(
+      backgroundColor: const Color(0xFF0A0A0F),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const CircularProgressIndicator(),
+              _buildHeader(),
+              const SizedBox(height: 24),
+              _buildImageSection(),
               const SizedBox(height: 20),
-              Text(
-                'Loading AI Model...',
-                style: theme.textTheme.titleMedium,
+              _buildButtons(),
+              const SizedBox(height: 20),
+              _buildResultSection(),
+              const SizedBox(height: 16),
+              _buildProbabilitiesBar(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Row(
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: const Color(0xFF00E5FF).withOpacity(0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFF00E5FF).withOpacity(0.4),
+            ),
+          ),
+          child: const Icon(
+            Icons.translate_rounded,
+            color: Color(0xFF00E5FF),
+            size: 22,
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Arabic Digit Recognizer',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Arabic Digit Recognition',
-                style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: _isModelLoaded
+                          ? const Color(0xFF00E5FF)
+                          : Colors.orange,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _isModelLoaded ? 'Model ready' : 'Loading model...',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.5),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
-      );
-    }
+      ],
+    );
+  }
 
-    // Show error screen if model failed to load
-    if (_errorMessage != null) {
-      return Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
-                const SizedBox(height: 16),
-                Text(
-                  'Error',
-                  style: theme.textTheme.headlineSmall?.copyWith(color: Colors.red),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _errorMessage!,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: _loadModel,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
+  Widget _buildImageSection() {
+    return Container(
+      width: double.infinity,
+      height: 280,
+      decoration: BoxDecoration(
+        color: const Color(0xFF12121A),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: _selectedImage != null
+              ? const Color(0xFF00E5FF).withOpacity(0.3)
+              : Colors.white.withOpacity(0.08),
         ),
-      );
-    }
-
-    // Main app screen
-    return Scaffold(
-      appBar: AppBar(
-        title: const Row(
-          children: [
-            Icon(Icons.auto_awesome),
-            SizedBox(width: 8),
-            Text('Arabic Digit AI'),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: () => _showInfoDialog(context),
-          ),
-        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(19),
+        child: _isProcessing
+            ? const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(color: Color(0xFF00E5FF)),
+                    SizedBox(height: 16),
+                    Text(
+                      'Analyzing...',
+                      style: TextStyle(color: Colors.white38, fontSize: 13),
+                    ),
+                  ],
+                ),
+              )
+            : _selectedImage != null
+                ? (_lastPrediction != null && _lastPrediction!.digits.isNotEmpty)
+                    ? DetectedBoxesView(
+                        imageFile: _selectedImage!,
+                        prediction: _lastPrediction!,
+                      )
+                    : Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Image.file(
+                            _selectedImage!,
+                            fit: BoxFit.contain,
+                          ),
+                        ],
+                      )
+                : Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.image_outlined,
+                          size: 56,
+                          color: Colors.white.withOpacity(0.15),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Take a photo or upload an image\nof a handwritten Arabic digit',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.3),
+                            fontSize: 13,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+      ),
+    );
+  }
+
+  Widget _buildConfidenceBadge() {
+    final pct = (_confidence * 100).toStringAsFixed(0);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: _confidence > 0.8
+              ? const Color(0xFF00E5FF)
+              : Colors.orange,
+          width: 1.5,
+        ),
+      ),
+      child: Text(
+        '$pct%',
+        style: TextStyle(
+          color: _confidence > 0.8
+              ? const Color(0xFF00E5FF)
+              : Colors.orange,
+          fontSize: 13,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildButtons() {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildActionButton(
+            icon: Icons.camera_alt_rounded,
+            label: 'Take Photo',
+            onTap: _isModelLoaded
+                ? () => _pickImage(ImageSource.camera)
+                : null,
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: _buildActionButton(
+            icon: Icons.photo_library_rounded,
+            label: 'Upload Image',
+            onTap: _isModelLoaded
+                ? () => _pickImage(ImageSource.gallery)
+                : null,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    VoidCallback? onTap,
+  }) {
+    final isEnabled = onTap != null;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: isEnabled
+              ? const Color(0xFF00E5FF).withOpacity(0.1)
+              : const Color(0xFF12121A),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isEnabled
+                ? const Color(0xFF00E5FF).withOpacity(0.4)
+                : Colors.white.withOpacity(0.05),
+          ),
+        ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Title section
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    'Handwritten Arabic Digit Recognition',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Draw a digit (٠-٩) or upload an image',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey.shade600,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
+            Icon(
+              icon,
+              color: isEnabled
+                  ? const Color(0xFF00E5FF)
+                  : Colors.white24,
+              size: 28,
             ),
-
-            const SizedBox(height: 24),
-
-            // Drawing Canvas
-            DrawingCanvas(
-              key: _canvasKey,
-              width: 280,
-              height: 280,
-            ),
-
-            const SizedBox(height: 20),
-
-            // Action Buttons
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Predict from drawing
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _isPredicting ? null : _predictFromDrawing,
-                    icon: _isPredicting
-                        ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                        : const Icon(Icons.psychology),
-                    label: Text(_isPredicting ? 'Analyzing...' : 'Predict'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: theme.colorScheme.primary,
-                      foregroundColor: theme.colorScheme.onPrimary,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(width: 12),
-
-                // Upload from gallery
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _isPredicting ? null : _predictFromGallery,
-                    icon: const Icon(Icons.photo_library),
-                    label: const Text('Gallery'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 12),
-
-            // Secondary actions
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Camera button
-                TextButton.icon(
-                  onPressed: _isPredicting ? null : _predictFromCamera,
-                  icon: const Icon(Icons.camera_alt, size: 20),
-                  label: const Text('Camera'),
-                ),
-
-                const SizedBox(width: 16),
-
-                // Clear button
-                TextButton.icon(
-                  onPressed: _clearAll,
-                  icon: const Icon(Icons.clear_all, size: 20),
-                  label: const Text('Clear All'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.red.shade400,
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            // Prediction Result Card
-            PredictionCard(
-              result: _predictionResult,
-              isLoading: _isPredicting,
-            ),
-
-            const SizedBox(height: 32),
-
-            // Footer
+            const SizedBox(height: 8),
             Text(
-              'Powered by TensorFlow Lite | ANN Model',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: Colors.grey.shade500,
+              label,
+              style: TextStyle(
+                color: isEnabled ? Colors.white : Colors.white24,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
               ),
             ),
-
-            const SizedBox(height: 16),
           ],
         ),
       ),
     );
   }
 
-  /// Show app info dialog
-  void _showInfoDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.info),
-            SizedBox(width: 8),
-            Text('About'),
-          ],
+  Widget _buildResultSection() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF12121A),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: _predictedDigit != null
+              ? const Color(0xFF00E5FF).withOpacity(0.3)
+              : Colors.white.withOpacity(0.08),
         ),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Arabic Handwritten Digit Recognition',
-              style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      child: _predictedDigit == null
+          ? const Center(
+              child: Text(
+                'No prediction yet',
+                style: TextStyle(color: Colors.white38, fontSize: 13),
+                textAlign: TextAlign.center,
+              ),
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Arabic digit (big)
+                Text(
+                  _arabicDigit,
+                  style: const TextStyle(
+                    color: Color(0xFF00E5FF),
+                    fontSize: 64,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                  ),
+                ),
+                const SizedBox(width: 24),
+                Container(width: 1, height: 60, color: Colors.white12),
+                const SizedBox(width: 24),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Digit $_latinDigit',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Confidence: ${(_confidence * 100).toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        color: _confidence > 0.8
+                            ? const Color(0xFF00E5FF)
+                            : Colors.orange,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            SizedBox(height: 8),
-            Text(
-              'This app uses a Fully Connected Neural Network (ANN) '
-                  'to recognize handwritten Arabic digits (0-9).',
-            ),
-            SizedBox(height: 12),
-            Text('Model Details:', style: TextStyle(fontWeight: FontWeight.bold)),
-            Text('• Input: 28×28 grayscale image'),
-            Text('• Architecture: Flatten → Dense(256) → Dense(128) → Dense(64) → Dense(10)'),
-            Text('• Output: 10 class probabilities'),
-            SizedBox(height: 12),
-            Text('Tips:', style: TextStyle(fontWeight: FontWeight.bold)),
-            Text('• Draw digits clearly in the center'),
-            Text('• Use thick strokes for better recognition'),
-            Text('• Ensure good contrast'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+    );
+  }
+
+  Widget _buildProbabilitiesBar() {
+    if (_probabilities.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF12121A),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'All probabilities',
+            style: TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: List.generate(10, (i) {
+              final prob =
+                  _probabilities.length > i ? _probabilities[i] : 0.0;
+              final isMax = i == _predictedDigit;
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Column(
+                    children: [
+                      // Bar
+                      Container(
+                        height: 50,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(4),
+                          color: Colors.white.withOpacity(0.05),
+                        ),
+                        alignment: Alignment.bottomCenter,
+                        child: FractionallySizedBox(
+                          heightFactor: prob.clamp(0.0, 1.0),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(4),
+                              color: isMax
+                                  ? const Color(0xFF00E5FF)
+                                  : const Color(0xFF7C4DFF)
+                                      .withOpacity(0.5),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'][i],
+                        style: TextStyle(
+                          color: isMax
+                              ? const Color(0xFF00E5FF)
+                              : Colors.white38,
+                          fontSize: 13,
+                          fontWeight:
+                              isMax ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
           ),
         ],
       ),
