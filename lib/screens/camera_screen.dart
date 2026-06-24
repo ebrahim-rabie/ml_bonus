@@ -233,9 +233,9 @@ class _CameraScreenState extends State<CameraScreen>
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: const Color(0xFF00E5FF).withOpacity(0.15),
+              color: const Color.fromRGBO(0, 229, 255, 0.15),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFF00E5FF).withOpacity(0.4)),
+              border: Border.all(color: const Color.fromRGBO(0, 229, 255, 0.4)),
             ),
             child: const Icon(Icons.translate_rounded, color: Color(0xFF00E5FF), size: 18),
           ),
@@ -265,8 +265,8 @@ class _CameraScreenState extends State<CameraScreen>
                   const SizedBox(width: 5),
                   Text(
                     _isModelLoaded ? 'Model ready' : 'Loading model...',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.5),
+                    style: const TextStyle(
+                      color: Color.fromRGBO(255, 255, 255, 0.5),
                       fontSize: 11,
                     ),
                   ),
@@ -321,7 +321,7 @@ class _CameraScreenState extends State<CameraScreen>
             ? const Color(0xFF00E5FF)
             : _confidence > 0.5
             ? Colors.orange
-            : Colors.white.withOpacity(0.3),
+            : const Color.fromRGBO(255, 255, 255, 0.3),
       ),
     );
   }
@@ -331,7 +331,7 @@ class _CameraScreenState extends State<CameraScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.7),
+        color: const Color.fromRGBO(0, 0, 0, 0.7),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: _confidence > 0.8 ? const Color(0xFF00E5FF) : Colors.orange,
@@ -358,8 +358,8 @@ class _CameraScreenState extends State<CameraScreen>
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: _predictedDigit != null
-              ? const Color(0xFF00E5FF).withOpacity(0.3)
-              : Colors.white.withOpacity(0.08),
+              ? const Color.fromRGBO(0, 229, 255, 0.3)
+              : const Color.fromRGBO(255, 255, 255, 0.08),
         ),
       ),
       child: _predictedDigit == null
@@ -447,7 +447,7 @@ class _CameraScreenState extends State<CameraScreen>
                         height: 40,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(4),
-                          color: Colors.white.withOpacity(0.05),
+                          color: const Color.fromRGBO(255, 255, 255, 0.05),
                         ),
                         alignment: Alignment.bottomCenter,
                         child: FractionallySizedBox(
@@ -457,7 +457,7 @@ class _CameraScreenState extends State<CameraScreen>
                               borderRadius: BorderRadius.circular(4),
                               color: isMax
                                   ? const Color(0xFF00E5FF)
-                                  : const Color(0xFF7C4DFF).withOpacity(0.5),
+                                  : const Color.fromRGBO(124, 77, 255, 0.5),
                             ),
                           ),
                         ),

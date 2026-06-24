@@ -163,10 +163,10 @@ class _HomeScreenState extends State<HomeScreen> {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: const Color(0xFF00E5FF).withOpacity(0.15),
+            color: const Color.fromRGBO(0, 229, 255, 0.15),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: const Color(0xFF00E5FF).withOpacity(0.4),
+              color: const Color.fromRGBO(0, 229, 255, 0.4),
             ),
           ),
           child: const Icon(
@@ -205,8 +205,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(width: 6),
                   Text(
                     _isModelLoaded ? 'Model ready' : 'Loading model...',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.5),
+                    style: const TextStyle(
+                      color: Color.fromRGBO(255, 255, 255, 0.5),
                       fontSize: 12,
                     ),
                   ),
@@ -228,8 +228,8 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: _selectedImage != null
-              ? const Color(0xFF00E5FF).withOpacity(0.3)
-              : Colors.white.withOpacity(0.08),
+              ? const Color.fromRGBO(0, 229, 255, 0.3)
+              : const Color.fromRGBO(255, 255, 255, 0.08),
         ),
       ),
       child: ClipRRect(
@@ -263,20 +263,20 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ],
                       )
-                : Center(
+                : const Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
                           Icons.image_outlined,
                           size: 56,
-                          color: Colors.white.withOpacity(0.15),
+                          color: Color.fromRGBO(255, 255, 255, 0.15),
                         ),
-                        const SizedBox(height: 12),
+                        SizedBox(height: 12),
                         Text(
                           'Take a photo or upload an image\nof a handwritten Arabic digit',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.3),
+                            color: Color.fromRGBO(255, 255, 255, 0.3),
                             fontSize: 13,
                           ),
                           textAlign: TextAlign.center,
@@ -284,33 +284,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-      ),
-    );
-  }
-
-  Widget _buildConfidenceBadge() {
-    final pct = (_confidence * 100).toStringAsFixed(0);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.7),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: _confidence > 0.8
-              ? const Color(0xFF00E5FF)
-              : Colors.orange,
-          width: 1.5,
-        ),
-      ),
-      child: Text(
-        '$pct%',
-        style: TextStyle(
-          color: _confidence > 0.8
-              ? const Color(0xFF00E5FF)
-              : Colors.orange,
-          fontSize: 13,
-          fontWeight: FontWeight.bold,
-        ),
       ),
     );
   }
@@ -353,13 +326,13 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
           color: isEnabled
-              ? const Color(0xFF00E5FF).withOpacity(0.1)
+              ? const Color.fromRGBO(0, 229, 255, 0.1)
               : const Color(0xFF12121A),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isEnabled
-                ? const Color(0xFF00E5FF).withOpacity(0.4)
-                : Colors.white.withOpacity(0.05),
+                ? const Color.fromRGBO(0, 229, 255, 0.4)
+                : const Color.fromRGBO(255, 255, 255, 0.05),
           ),
         ),
         child: Column(
@@ -395,8 +368,8 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: _predictedDigit != null
-              ? const Color(0xFF00E5FF).withOpacity(0.3)
-              : Colors.white.withOpacity(0.08),
+              ? const Color.fromRGBO(0, 229, 255, 0.3)
+              : const Color.fromRGBO(255, 255, 255, 0.08),
         ),
       ),
       child: _predictedDigit == null
@@ -484,7 +457,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         height: 50,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(4),
-                          color: Colors.white.withOpacity(0.05),
+                          color: const Color.fromRGBO(255, 255, 255, 0.05),
                         ),
                         alignment: Alignment.bottomCenter,
                         child: FractionallySizedBox(
@@ -494,8 +467,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               borderRadius: BorderRadius.circular(4),
                               color: isMax
                                   ? const Color(0xFF00E5FF)
-                                  : const Color(0xFF7C4DFF)
-                                      .withOpacity(0.5),
+                                  : const Color.fromRGBO(124, 77, 255, 0.5),
                             ),
                           ),
                         ),

@@ -291,7 +291,7 @@ class ArabicDigitClassifier {
 
     final resized = _resizeMask(square, digitSize, digitSize);
     var finalImage = List.generate(inputSize, (_) => List<double>.filled(inputSize, 0));
-    final start = (inputSize - digitSize) ~/ 2;
+    const start = (inputSize - digitSize) ~/ 2;
 
     for (var y = 0; y < digitSize; y++) {
       for (var x = 0; x < digitSize; x++) {
